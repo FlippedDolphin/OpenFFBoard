@@ -1,12 +1,12 @@
 /*		
- * eeprom_addresses.c
- *
- *  Created on: 24.01.2020
- *  Author: Yannick
- *
- *	/!\ Generated from the file memory_map.csv
-   / ! \ DO NOT EDIT THIS DIRECTLY !!!
- */
+ * eeprom_addresses.c		
+ *		
+ *  Created on: 24.01.2020		
+ *  Author: Yannick		
+ *		
+ *	/!\ Generated from the file memory_map.csv 
+   / ! \ DO NOT EDIT THIS DIRECTLY !!!	
+ */		
 		
 #include "eeprom_addresses.h"		
 
@@ -29,14 +29,18 @@ const uint16_t VirtAddVarTab[NB_OF_VAR] =
 	ADR_FFBWHEEL_BUTTONCONF,
 	ADR_FFBWHEEL_ANALOGCONF,
 	ADR_FFBWHEEL_CONF1,
+// CAN remote
+	ADR_CANREMOTE_CONF1,
+	ADR_CANREMOTE_CONF2,
 // Button Sources:
 	ADR_SPI_BTN_1_CONF,
 	ADR_SHIFTERANALOG_CONF,
-	ADR_LOCAL_BTN_CONF,
-	ADR_LOCAL_BTN_CONF_2,
+	ADR_LOCAL_BTN_CONF, // Pin mask
+	ADR_LOCAL_BTN_CONF_2, // Misc settings
 	ADR_SPI_BTN_2_CONF,
 	ADR_SPI_BTN_1_CONF_2,
 	ADR_SPI_BTN_2_CONF_2,
+	ADR_LOCAL_BTN_CONF_3, // Pulse mask
 // Local encoder
 	ADR_ENCLOCAL_CPR,
 	ADR_ENCLOCAL_OFS,
@@ -80,6 +84,8 @@ const uint16_t VirtAddVarTab[NB_OF_VAR] =
 	ADR_AXIS1_EFFECTS1, // 0-7 idlespring, 8-15 damper
 	ADR_AXIS1_SPEEDACCEL_FILTER, // Speed/Accel filter Lowpass profile
 	ADR_AXIS1_ENC_RATIO, // Accel filter Lowpass
+	ADR_AXIS1_EFFECTS2, // 0-7 Friction, 8-15 Inertia
+	ADR_AXIS1_POSTPROCESS1, // 0-7 expo curve
 // TMC1
 	ADR_TMC1_MOTCONF, // 0-2: MotType 3-5: PhiE source 6-15: Poles
 	ADR_TMC1_CPR,
@@ -104,6 +110,8 @@ const uint16_t VirtAddVarTab[NB_OF_VAR] =
 	ADR_AXIS2_EFFECTS1, // 0-7 idlespring, 8-15 damper
 	ADR_AXIS2_SPEEDACCEL_FILTER, // Speed/Accel filter Lowpass profile
 	ADR_AXIS2_ENC_RATIO, // Store the encoder ratio for an axis
+	ADR_AXIS2_EFFECTS2, // 0-7 Friction, 8-15 Inertia
+	ADR_AXIS2_POSTPROCESS1, // 0-7 expo curve
 // TMC2
 	ADR_TMC2_MOTCONF, // 0-2: MotType 3-5: PhiE source 6-15: Poles
 	ADR_TMC2_CPR,
@@ -128,6 +136,8 @@ const uint16_t VirtAddVarTab[NB_OF_VAR] =
 	ADR_AXIS3_EFFECTS1, // 0-7 idlespring, 8-15 damper
 	ADR_AXIS3_SPEEDACCEL_FILTER, // Speed/Accel filter Lowpass profile
 	ADR_AXIS3_ENC_RATIO, // Store the encoder ratio for an axis
+	ADR_AXIS3_EFFECTS2, // 0-7 Friction, 8-15 Inertia
+	ADR_AXIS3_POSTPROCESS1, // 0-7 expo curve
 // TMC3
 	ADR_TMC3_MOTCONF, // 0-2: MotType 3-5: PhiE source 6-15: Poles
 	ADR_TMC3_CPR,
@@ -142,10 +152,19 @@ const uint16_t VirtAddVarTab[NB_OF_VAR] =
 	ADR_TMC3_FLUX_I,
 	ADR_TMC3_PHIE_OFS,
 	ADR_TMC3_TRQ_FILT,
+// RMD CAN Motor
+	ADR_RMD1_DATA1, //0-4 CAN ID
+	ADR_RMD1_TORQUE, //Maximum current
+	ADR_RMD1_OFFSET, //Position offset
+	ADR_RMD2_DATA1,
+	ADR_RMD2_TORQUE,
+	ADR_RMD2_OFFSET,
 // Odrive
 	ADR_ODRIVE_CANID, //0-6 ID M0, 7-12 ID M1, 13-15 can speed
 	ADR_ODRIVE_SETTING1_M0,
 	ADR_ODRIVE_SETTING1_M1,
+	ADR_ODRIVE_OFS_M0, // Encoder offset position reload
+	ADR_ODRIVE_OFS_M1,
 // VESC Section
 	ADR_VESC1_CANID, //0-7 AxisCanID, 8-16 VescCanId
 	ADR_VESC1_DATA, //0-2 can speed, 3 useVescEncoder
@@ -182,6 +201,7 @@ const uint16_t VirtAddVarTab[NB_OF_VAR] =
 	ADR_LOCALANALOG_MAX_6,
 	ADR_LOCALANALOG_MIN_7,
 	ADR_LOCALANALOG_MAX_7,
+// ADS111X
 	ADR_ADS111X_MIN_0,
 	ADR_ADS111X_MAX_0,
 	ADR_ADS111X_MIN_1,
@@ -193,8 +213,8 @@ const uint16_t VirtAddVarTab[NB_OF_VAR] =
 };
 
 /**		
- * Variables to be included in a flash dump
- */
+ * Variables to be included in a flash dump		
+ */		
 const uint16_t exportableFlashAddresses[NB_EXPORTABLE_ADR] =		
 {
 // System variables
@@ -209,14 +229,18 @@ const uint16_t exportableFlashAddresses[NB_EXPORTABLE_ADR] =
 	ADR_FFBWHEEL_BUTTONCONF,
 	ADR_FFBWHEEL_ANALOGCONF,
 	ADR_FFBWHEEL_CONF1,
+// CAN remote
+	ADR_CANREMOTE_CONF1,
+	ADR_CANREMOTE_CONF2,
 // Button Sources:
 	ADR_SPI_BTN_1_CONF,
 	ADR_SHIFTERANALOG_CONF,
-	ADR_LOCAL_BTN_CONF,
-	ADR_LOCAL_BTN_CONF_2,
+	ADR_LOCAL_BTN_CONF, // Pin mask
+	ADR_LOCAL_BTN_CONF_2, // Misc settings
 	ADR_SPI_BTN_2_CONF,
 	ADR_SPI_BTN_1_CONF_2,
 	ADR_SPI_BTN_2_CONF_2,
+	ADR_LOCAL_BTN_CONF_3, // Pulse mask
 // Local encoder
 	ADR_ENCLOCAL_CPR,
 	ADR_ENCLOCAL_OFS,
@@ -260,6 +284,8 @@ const uint16_t exportableFlashAddresses[NB_EXPORTABLE_ADR] =
 	ADR_AXIS1_EFFECTS1, // 0-7 idlespring, 8-15 damper
 	ADR_AXIS1_SPEEDACCEL_FILTER, // Speed/Accel filter Lowpass profile
 	ADR_AXIS1_ENC_RATIO, // Accel filter Lowpass
+	ADR_AXIS1_EFFECTS2, // 0-7 Friction, 8-15 Inertia
+	ADR_AXIS1_POSTPROCESS1, // 0-7 expo curve
 // TMC1
 	ADR_TMC1_MOTCONF, // 0-2: MotType 3-5: PhiE source 6-15: Poles
 	ADR_TMC1_CPR,
@@ -284,6 +310,8 @@ const uint16_t exportableFlashAddresses[NB_EXPORTABLE_ADR] =
 	ADR_AXIS2_EFFECTS1, // 0-7 idlespring, 8-15 damper
 	ADR_AXIS2_SPEEDACCEL_FILTER, // Speed/Accel filter Lowpass profile
 	ADR_AXIS2_ENC_RATIO, // Store the encoder ratio for an axis
+	ADR_AXIS2_EFFECTS2, // 0-7 Friction, 8-15 Inertia
+	ADR_AXIS2_POSTPROCESS1, // 0-7 expo curve
 // TMC2
 	ADR_TMC2_MOTCONF, // 0-2: MotType 3-5: PhiE source 6-15: Poles
 	ADR_TMC2_CPR,
@@ -308,6 +336,8 @@ const uint16_t exportableFlashAddresses[NB_EXPORTABLE_ADR] =
 	ADR_AXIS3_EFFECTS1, // 0-7 idlespring, 8-15 damper
 	ADR_AXIS3_SPEEDACCEL_FILTER, // Speed/Accel filter Lowpass profile
 	ADR_AXIS3_ENC_RATIO, // Store the encoder ratio for an axis
+	ADR_AXIS3_EFFECTS2, // 0-7 Friction, 8-15 Inertia
+	ADR_AXIS3_POSTPROCESS1, // 0-7 expo curve
 // TMC3
 	ADR_TMC3_MOTCONF, // 0-2: MotType 3-5: PhiE source 6-15: Poles
 	ADR_TMC3_CPR,
@@ -322,10 +352,19 @@ const uint16_t exportableFlashAddresses[NB_EXPORTABLE_ADR] =
 	ADR_TMC3_FLUX_I,
 //	ADR_TMC3_PHIE_OFS,
 	ADR_TMC3_TRQ_FILT,
+// RMD CAN Motor
+	ADR_RMD1_DATA1, //0-4 CAN ID
+	ADR_RMD1_TORQUE, //Maximum current
+	ADR_RMD1_OFFSET, //Position offset
+	ADR_RMD2_DATA1,
+	ADR_RMD2_TORQUE,
+	ADR_RMD2_OFFSET,
 // Odrive
 	ADR_ODRIVE_CANID, //0-6 ID M0, 7-12 ID M1, 13-15 can speed
 	ADR_ODRIVE_SETTING1_M0,
 	ADR_ODRIVE_SETTING1_M1,
+	ADR_ODRIVE_OFS_M0, // Encoder offset position reload
+	ADR_ODRIVE_OFS_M1,
 // VESC Section
 	ADR_VESC1_CANID, //0-7 AxisCanID, 8-16 VescCanId
 	ADR_VESC1_DATA, //0-2 can speed, 3 useVescEncoder
@@ -362,6 +401,7 @@ const uint16_t exportableFlashAddresses[NB_EXPORTABLE_ADR] =
 	ADR_LOCALANALOG_MAX_6,
 	ADR_LOCALANALOG_MIN_7,
 	ADR_LOCALANALOG_MAX_7,
+// ADS111X
 	ADR_ADS111X_MIN_0,
 	ADR_ADS111X_MAX_0,
 	ADR_ADS111X_MIN_1,

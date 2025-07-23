@@ -38,6 +38,7 @@ enum class ClassType : uint16_t {
 #define CLSID_MAIN_FFBWHEEL 0x1
 #define CLSID_MAIN_FFBJOY	0x2
 #define CLSID_MAIN_FFBEXT	0x3
+#define CLSID_MAIN_CANINPUT	0x5
 #define CLSID_MAIN_TMCDBG 	0xB
 #define CLSID_MAIN_CAN	 	0xC
 #define CLSID_MAIN_MIDI 	0xD
@@ -78,6 +79,8 @@ enum class ClassType : uint16_t {
 #define CLSID_MOT_VESC1		0x88
 #define CLSID_MOT_SM1		0x89
 #define CLSID_MOT_SM2		0x8A
+#define CLSID_MOT_RMD1		0x8B
+#define CLSID_MOT_RMD2		0x8C
 
 // Internal classes
 #define CLSID_AXIS			0xA01

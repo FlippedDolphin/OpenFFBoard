@@ -1,23 +1,23 @@
 /*		
- * eeprom_addresses.h
- *
- *  Created on: 24.01.2020
- *  Author: Yannick
- *
- *	/!\ Generated from the file memory_map.csv
-   / ! \ DO NOT EDIT THIS DIRECTLY !!!
- */
+ * eeprom_addresses.h		
+ *		
+ *  Created on: 24.01.2020		
+ *  Author: Yannick		
+ *		
+ *	/!\ Generated from the file memory_map.csv 
+   / ! \ DO NOT EDIT THIS DIRECTLY !!!	
+ */			
 		
 #ifndef EEPROM_ADDRESSES_H_
 #define EEPROM_ADDRESSES_H_
 
 #include "main.h"
 // Change this to the amount of currently registered variables
-#define NB_OF_VAR 147
+#define NB_OF_VAR 164
 extern const uint16_t VirtAddVarTab[NB_OF_VAR];
 
 // Amount of variables in exportable list
-#define NB_EXPORTABLE_ADR 132
+#define NB_EXPORTABLE_ADR 149
 extern const uint16_t exportableFlashAddresses[NB_EXPORTABLE_ADR];
 
 
@@ -47,14 +47,18 @@ uint16_t EE_ReadVariable(uint16_t VirtAddress, uint16_t* Data) will return 1 if 
 #define ADR_FFBWHEEL_BUTTONCONF 0x101
 #define ADR_FFBWHEEL_ANALOGCONF 0x102
 #define ADR_FFBWHEEL_CONF1 0x103
+// CAN remote
+#define ADR_CANREMOTE_CONF1 0x120
+#define ADR_CANREMOTE_CONF2 0x121
 // Button Sources:
 #define ADR_SPI_BTN_1_CONF 0x201
 #define ADR_SHIFTERANALOG_CONF 0x202
-#define ADR_LOCAL_BTN_CONF 0x203
-#define ADR_LOCAL_BTN_CONF_2 0x204
+#define ADR_LOCAL_BTN_CONF 0x203 // Pin mask
+#define ADR_LOCAL_BTN_CONF_2 0x204 // Misc settings
 #define ADR_SPI_BTN_2_CONF 0x205
 #define ADR_SPI_BTN_1_CONF_2 0x206
 #define ADR_SPI_BTN_2_CONF_2 0x207
+#define ADR_LOCAL_BTN_CONF_3 0x208 // Pulse mask
 // Local encoder
 #define ADR_ENCLOCAL_CPR 0x210
 #define ADR_ENCLOCAL_OFS 0x211
@@ -98,6 +102,8 @@ uint16_t EE_ReadVariable(uint16_t VirtAddress, uint16_t* Data) will return 1 if 
 #define ADR_AXIS1_EFFECTS1 0x308 // 0-7 idlespring, 8-15 damper
 #define ADR_AXIS1_SPEEDACCEL_FILTER 0x309 // Speed/Accel filter Lowpass profile
 #define ADR_AXIS1_ENC_RATIO 0x30A // Accel filter Lowpass
+#define ADR_AXIS1_EFFECTS2 0x30B // 0-7 Friction, 8-15 Inertia
+#define ADR_AXIS1_POSTPROCESS1 0x30C // 0-7 expo curve
 // TMC1
 #define ADR_TMC1_MOTCONF 0x320 // 0-2: MotType 3-5: PhiE source 6-15: Poles
 #define ADR_TMC1_CPR 0x321
@@ -122,6 +128,8 @@ uint16_t EE_ReadVariable(uint16_t VirtAddress, uint16_t* Data) will return 1 if 
 #define ADR_AXIS2_EFFECTS1 0x348 // 0-7 idlespring, 8-15 damper
 #define ADR_AXIS2_SPEEDACCEL_FILTER 0x349 // Speed/Accel filter Lowpass profile
 #define ADR_AXIS2_ENC_RATIO 0x34A // Store the encoder ratio for an axis
+#define ADR_AXIS2_EFFECTS2 0x34B // 0-7 Friction, 8-15 Inertia
+#define ADR_AXIS2_POSTPROCESS1 0x34C // 0-7 expo curve
 // TMC2
 #define ADR_TMC2_MOTCONF 0x360 // 0-2: MotType 3-5: PhiE source 6-15: Poles
 #define ADR_TMC2_CPR 0x361
@@ -146,6 +154,8 @@ uint16_t EE_ReadVariable(uint16_t VirtAddress, uint16_t* Data) will return 1 if 
 #define ADR_AXIS3_EFFECTS1 0x388 // 0-7 idlespring, 8-15 damper
 #define ADR_AXIS3_SPEEDACCEL_FILTER 0x389 // Speed/Accel filter Lowpass profile
 #define ADR_AXIS3_ENC_RATIO 0x38A // Store the encoder ratio for an axis
+#define ADR_AXIS3_EFFECTS2 0x38B // 0-7 Friction, 8-15 Inertia
+#define ADR_AXIS3_POSTPROCESS1 0x38C // 0-7 expo curve
 // TMC3
 #define ADR_TMC3_MOTCONF 0x3A0 // 0-2: MotType 3-5: PhiE source 6-15: Poles
 #define ADR_TMC3_CPR 0x3A1
@@ -160,10 +170,19 @@ uint16_t EE_ReadVariable(uint16_t VirtAddress, uint16_t* Data) will return 1 if 
 #define ADR_TMC3_FLUX_I 0x3AA
 #define ADR_TMC3_PHIE_OFS 0x3AB
 #define ADR_TMC3_TRQ_FILT 0x3AC
+// RMD CAN Motor
+#define ADR_RMD1_DATA1 0x3C0 //0-4 CAN ID
+#define ADR_RMD1_TORQUE 0x3C1 //Maximum current
+#define ADR_RMD1_OFFSET 0x3C2 //Position offset
+#define ADR_RMD2_DATA1 0x3C3
+#define ADR_RMD2_TORQUE 0x3C4
+#define ADR_RMD2_OFFSET 0x3C5
 // Odrive
 #define ADR_ODRIVE_CANID 0x3D0 //0-6 ID M0, 7-12 ID M1, 13-15 can speed
 #define ADR_ODRIVE_SETTING1_M0 0x3D1
 #define ADR_ODRIVE_SETTING1_M1 0x3D2
+#define ADR_ODRIVE_OFS_M0 0x3D3 // Encoder offset position reload
+#define ADR_ODRIVE_OFS_M1 0x3D4
 // VESC Section
 #define ADR_VESC1_CANID 0x3E0 //0-7 AxisCanID, 8-16 VescCanId
 #define ADR_VESC1_DATA 0x3E1 //0-2 can speed, 3 useVescEncoder
@@ -200,6 +219,7 @@ uint16_t EE_ReadVariable(uint16_t VirtAddress, uint16_t* Data) will return 1 if 
 #define ADR_LOCALANALOG_MAX_6 0x50D
 #define ADR_LOCALANALOG_MIN_7 0x50E
 #define ADR_LOCALANALOG_MAX_7 0x50F
+// ADS111X
 #define ADR_ADS111X_MIN_0 0x510
 #define ADR_ADS111X_MAX_0 0x511
 #define ADR_ADS111X_MIN_1 0x512

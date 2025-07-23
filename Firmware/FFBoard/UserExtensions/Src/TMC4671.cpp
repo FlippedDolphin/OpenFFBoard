@@ -9,7 +9,7 @@
 #ifdef TMC4671DRIVER
 #include "ledEffects.h"
 #include "voltagesense.h"
-#include "stm32f4xx_hal_spi.h"
+//#include "stm32f4xx_hal_spi.h"
 #include <math.h>
 #include <assert.h>
 #include "ErrorHandler.h"
@@ -23,7 +23,7 @@ ClassIdentifier TMC_1::info = {
 
 
 bool TMC_1::isCreatable() {
-	return motor_spi.isPinFree(OutputPin(*SPI1_SS1_GPIO_Port, SPI1_SS1_Pin));
+	return motor_spi.isPinFree(*motor_spi.getCsPin(0));
 }
 
 
@@ -34,7 +34,7 @@ ClassIdentifier TMC_2::info = {
 
 
 bool TMC_2::isCreatable() {
-	return motor_spi.isPinFree(OutputPin(*SPI1_SS2_GPIO_Port, SPI1_SS2_Pin));
+	return motor_spi.isPinFree(*motor_spi.getCsPin(1));
 }
 
 
@@ -52,18 +52,22 @@ TMC4671::TMC4671(SPIPort& spiport,OutputPin cspin,uint8_t address) :
 	CommandHandler::setCommandsEnabled(false);
 	setAddress(address);
 	registerCommands();
+	spiConfig.peripheral = motor_spi.getPortHandle()->Init;
 	spiConfig.peripheral.Mode = SPI_MODE_MASTER;
 	spiConfig.peripheral.Direction = SPI_DIRECTION_2LINES;
 	spiConfig.peripheral.DataSize = SPI_DATASIZE_8BIT;
 	spiConfig.peripheral.CLKPolarity = SPI_POLARITY_HIGH;
 	spiConfig.peripheral.CLKPhase = SPI_PHASE_2EDGE;
 	spiConfig.peripheral.NSS = SPI_NSS_SOFT;
-	spiConfig.peripheral.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+	spiConfig.peripheral.BaudRatePrescaler = spiPort.getClosestPrescaler(10e6).first; // 10MHz
 	spiConfig.peripheral.FirstBit = SPI_FIRSTBIT_MSB;
 	spiConfig.peripheral.TIMode = SPI_TIMODE_DISABLE;
 	spiConfig.peripheral.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-	spiConfig.peripheral.CRCPolynomial = 10;
 	spiConfig.cspol = true;
+
+#ifdef TMC4671_SPI_DATA_IDLENESS
+	spiConfig.peripheral.MasterInterDataIdleness = TMC4671_SPI_DATA_IDLENESS;
+#endif
 
 	spiPort.takeSemaphore();
 	spiPort.configurePort(&spiConfig.peripheral);
@@ -186,7 +190,7 @@ void TMC4671::restoreFlash(){
 }
 
 bool TMC4671::hasPower(){
-	uint16_t intV = getIntV();
+	int32_t intV = getIntV();
 	return (intV > 10000) && (getExtV() > 10000) && (intV < 78000);
 }
 
@@ -438,7 +442,7 @@ void TMC4671::Run(){
 		case TMC_ControlState::uninitialized:
 			allowStateChange = false;
 			// check communication and write constants
-			if(!pingDriver()){ // driver not available
+			if(!pingDriver() || emergency){ // driver not available or emergency was set before startup
 				initialized = false; // Assume driver is not initialized if we can not detect it
 				Delay(250);
 				break;
@@ -456,7 +460,7 @@ void TMC4671::Run(){
 			pulseClipLed(); // blink led
 			static uint8_t powerCheckCounter = 0;
 			// if powered check ADCs and go to encoder calibration
-			if(!hasPower()){
+			if(!hasPower() || emergency){
 				powerCheckCounter = 0;
 				Delay(250);
 				break;
@@ -634,6 +638,10 @@ void TMC4671::Run(){
 			flagCheckInProgress = false;
 		}
 		Delay(10);
+
+		if(emergency && !motorReady()){
+			this->Suspend(); // we can not safely run. wait until resumed by estop
+		}
 	} // End while
 }
 
@@ -835,16 +843,13 @@ bool TMC4671::findEncoderIndex(int32_t speed, uint16_t power,bool offsetPhiM,boo
 
 	//uint32_t mposStart = readReg(0x2A);
 	int32_t timeout = 1000; // 10s
-	for(int16_t flux = 0; flux <= power; flux+=10){
-		setFluxTorque(flux, 0);
-		Delay(3);
-	}
+	rampFlux(power, 500);
 	runOpenLoop(power, 0, speed, 10, true);
 	while(!encoderIndexHitFlag && timeout-- > 0){
 		Delay(10);
 	}
 	//int32_t speed = 10;
-
+	rampFlux(0, 100);
 	runOpenLoop(0, 0, 0, 10, true);
 	if(!encoderIndexHitFlag){
 		pulseErrLed();
@@ -983,10 +988,7 @@ void TMC4671::bangInitEnc(int16_t power){
 	setPhiE_ext(phiEpos);
 	setPhiEtype(PhiE::ext);
 	// Ramp up flux
-	for(int16_t flux = 0; flux <= power; flux+=10){
-		setFluxTorque(flux, 0);
-		Delay(3);
-	}
+	rampFlux(power, 1000);
 	int16_t phiE_enc = getPhiE_Enc();
 
 	Delay(50);
@@ -1007,7 +1009,7 @@ void TMC4671::bangInitEnc(int16_t power){
 		//phiE_enc=readReg(phiEreg)>>16;
 		Delay(10);
 	}
-	setFluxTorque(0, 0);
+	rampFlux(0, 100);
 
 	//Write offset
 	//int16_t phiE_abn = readReg(0x2A)>>16;
@@ -1058,10 +1060,7 @@ void TMC4671::calibrateAenc(){
 	setMotionMode(MotionMode::torque,true);
 
 	if(this->conf.motconf.motor_type == MotorType::STEPPER || this->conf.motconf.motor_type == MotorType::BLDC){
-		for(int16_t flux = 0; flux <= bangInitPower; flux+=10){
-			setFluxTorque(flux, 0);
-			Delay(5);
-		}
+		rampFlux(bangInitPower, 250);
 	}
 	uint32_t minVal_0 = 0xffff,	minVal_1 = 0xffff,	minVal_2 = 0xffff;
 	uint32_t maxVal_0 = 0,	maxVal_1 = 0,	maxVal_2 = 0;
@@ -1095,6 +1094,7 @@ void TMC4671::calibrateAenc(){
 			aencconf.AENC2_scale = 0xF6FF00 / (maxVal_2 - minVal_2);
 			aencconf.rdir = false;
 			setup_AENC(aencconf);
+			rampFlux(0, 100);
 			runOpenLoop(0, 0, 0, 1000,true);
 			Delay(250);
 			// Zero aenc
@@ -1104,6 +1104,7 @@ void TMC4671::calibrateAenc(){
 			stage = 2;
 		}else if(getPos() > 0 && stage == 2){
 			stage = 3;
+			rampFlux(0, 100);
 			runOpenLoop(0, 0, 0, 1000,true);
 		}
 
@@ -1184,10 +1185,8 @@ bool TMC4671::checkEncoder(){
 
 	setPhiE_ext(startAngle);
 	// Ramp up flux
-	for(int16_t flux = 0; flux <= 2*bangInitPower/3; flux+=20){
-		setFluxTorque(flux, 0);
-		Delay(2);
-	}
+	rampFlux(2*bangInitPower/3, 250);
+
 	//Forward
 	int16_t phiE_enc = 0;
 	uint16_t failcount = 0;
@@ -1275,7 +1274,7 @@ bool TMC4671::checkEncoder(){
 		ErrorHandler::addError(Error(ErrorCode::encoderReversed,ErrorType::warning,"Encoder direction reversed during check"));
 	}
 
-	setFluxTorque(0, 0);
+	rampFlux(0, 100);
 	setPhiE_ext(0);
 	setPhiEtype(lastphie);
 	setMotionMode(lastmode,true);
@@ -1627,6 +1626,7 @@ void TMC4671::runOpenLoop(uint16_t ud,uint16_t uq,int32_t speed,int32_t accel,bo
 	if(this->conf.motconf.motor_type == MotorType::DC){
 		uq = ud+uq; // dc motor has no flux. add to torque
 	}
+	startMotor();
 	if(torqueMode){
 		if(this->conf.motconf.motor_type == MotorType::DC){
 			uq = ud+uq; // dc motor has no flux. add to torque
@@ -1650,7 +1650,7 @@ void TMC4671::setUdUq(int16_t ud,int16_t uq){
 void TMC4671::stopMotor(){
 	// Stop driver if running
 
-	//enablePin.reset();
+//	enablePin.reset();
 	motorEnabledRequested = false;
 	if(state == TMC_ControlState::Running || state == TMC_ControlState::EncoderFinished){
 		setMotionMode(MotionMode::stop,true);
@@ -1660,43 +1660,46 @@ void TMC4671::stopMotor(){
 }
 void TMC4671::startMotor(){
 	motorEnabledRequested = true;
-	if(!initialized || emergency){
-		//initialize();
-		emergency = false;
-//		if(state != TMC_ControlState::Init_wait)
-//			changeState(TMC_ControlState::Init_wait);
-	}
 
 	if(state == TMC_ControlState::Shutdown && initialized && encoderAligned){
 		changeState(TMC_ControlState::Running);
 	}
-	// Start driver if powered
-	if(hasPower()){
+	// Start driver if powered and emergency flag reset
+	if(hasPower() && !emergency){
 		setPwm(TMC_PwmMode::PWM_FOC); // enable foc
+		enablePin.set();
 		setMotionMode(nextMotionMode,true);
 
 	}
-//	else{
-//		changeState(TMC_ControlState::waitPower);
-//	}
+	else{
+		changeState(TMC_ControlState::waitPower);
+	}
 
 }
 
 void TMC4671::emergencyStop(bool reset){
 	if(!reset){
-		setPwm(TMC_PwmMode::HSlow_LShigh); // Short low side for instant stop
+//		setPwm(TMC_PwmMode::HSlow_LShigh); // Short low side for instant stop
 		emergency = true;
 		enablePin.reset(); // Release enable pin to disable the whole driver
 		motorEnabledRequested = false;
 		this->stopMotor();
+
 	}else{
-		setPwm(TMC_PwmMode::PWM_FOC);
+//		enablePin.set();
+//		writeReg(0x64, 0); // Set flux and torque 0 directly. Make sure motor does not jump
+//		setPwm(TMC_PwmMode::PWM_FOC);
 		emergency = false;
-		enablePin.set();
 		motorEnabledRequested = true;
 		//this->changeState(TMC_ControlState::waitPower, true); // Reinit
 		this->startMotor();
-
+		if(!motorReady()){
+			if(inIsr()){
+				ResumeFromISR();
+			}else{
+				Resume();
+			}
+		}
 	}
 }
 
@@ -1711,6 +1714,7 @@ int16_t TMC4671::controlFluxDissipate(){
 		// Reaches limit at +5v if scaler is 1
 		return(clip<int32_t,int32_t>(vDiff * conf.hwconf.fluxDissipationScaler * curLimits.pid_torque_flux * 0.0002,0,curLimits.pid_torque_flux));
 	}
+	return 0;
 }
 
 /**
@@ -2020,8 +2024,6 @@ void TMC4671::setMotorType(MotorType motor,uint16_t poles){
 	writeReg(0x1B, mtype);
 	if(motor == MotorType::BLDC && !ES_TMCdetected){
 		setSvPwm(conf.motconf.svpwm); // Higher speed for BLDC motors. Not available in engineering samples
-	}else{
-		setSvPwm(false);
 	}
 }
 
@@ -2045,7 +2047,7 @@ int16_t TMC4671::getFlux(){
 	return readReg(0x64) && 0xffff;
 }
 void TMC4671::setFluxTorque(int16_t flux, int16_t torque){
-	if(curMotionMode != MotionMode::torque){
+	if(curMotionMode != MotionMode::torque && !emergency){
 		setMotionMode(MotionMode::torque,true);
 	}
 	writeReg(0x64, (flux & 0xffff) | (torque << 16));
@@ -2058,6 +2060,22 @@ void TMC4671::setFluxTorqueFF(int16_t flux, int16_t torque){
 	writeReg(0x65, (flux & 0xffff) | (torque << 16));
 }
 
+/**
+ * Ramps flux from current value to a target value over a specified duration
+ */
+void TMC4671::rampFlux(uint16_t target,uint16_t time_ms){
+	uint16_t startFlux = readReg(0x64) & 0xffff;
+	int32_t stepsize = (target - startFlux) / std::max<uint16_t>(1, time_ms/2);
+	if(stepsize == 0){
+		stepsize = startFlux < target ? 1 : -1;
+	}
+	uint16_t flux = startFlux;
+	while(abs(target - flux) >= abs(stepsize)){
+		flux+=stepsize;
+		setFluxTorque(std::max<int32_t>(0,flux), 0);
+		Delay(2);
+	}
+}
 
 void TMC4671::setPids(TMC4671PIDConf pids){
 	curPids = pids;
@@ -2267,10 +2285,7 @@ void TMC4671::estimateABNparams(){
 	setPhiEtype(PhiE::ext);
 	setFluxTorque(0, 0);
 	setMotionMode(MotionMode::torque,true);
-	for(int16_t flux = 0; flux <= bangInitPower; flux+=10){
-		setFluxTorque(flux, 0);
-		Delay(5);
-	}
+	rampFlux(bangInitPower, 1000);
 
 	int16_t phiE_abn = readReg(0x2A)>>16;
 	int16_t phiE_abn_old = 0;
@@ -2294,7 +2309,7 @@ void TMC4671::estimateABNparams(){
 	}
 	setTmcPos(pos+getPos());
 
-	setFluxTorque(0, 0);
+	rampFlux(0, 100);
 	setPhiEtype(lastphie);
 	setMotionMode(lastmode,true);
 
@@ -2322,10 +2337,7 @@ void TMC4671::estimateExtEnc(){
 	setPhiEtype(PhiE::ext);
 	setFluxTorque(0, 0);
 	setMotionMode(MotionMode::torque,true);
-	for(int16_t flux = 0; flux <= bangInitPower; flux+=10){
-		setFluxTorque(flux, 0);
-		Delay(5);
-	}
+	rampFlux(bangInitPower, 1000);
 	int16_t phiE_enc = getPhiEfromExternalEncoder();
 	int16_t phiE_enc_old = 0;
 	int16_t rcount=0,c = 0; // Count how often direction was in reverse
@@ -2343,7 +2355,7 @@ void TMC4671::estimateExtEnc(){
 		}
 	}
 
-	setFluxTorque(0, 0);
+	rampFlux(0, 100);
 	setPhiEtype(lastphie);
 	setMotionMode(lastmode,true);
 
@@ -2378,10 +2390,9 @@ void TMC4671::setBBM(uint8_t bbmL,uint8_t bbmH){
 }
 
 void TMC4671::setPwm(uint8_t val,uint16_t maxcnt,uint8_t bbmL,uint8_t bbmH){
-	writeReg(0x18, maxcnt);
-	updateReg(0x1A,val,0xff,0);
-	uint32_t bbmr = bbmL | (bbmH << 8);
-	writeReg(0x19, bbmr);
+	setPwmMaxCnt(maxcnt);
+	setPwm((TMC_PwmMode)val);
+	setBBM(bbmL, bbmH);
 	writeReg(0x17,0); //Polarity
 }
 
@@ -2390,10 +2401,11 @@ void TMC4671::setPwm(uint8_t val,uint16_t maxcnt,uint8_t bbmL,uint8_t bbmH){
  * Normally active but should be disabled if the motor has no isolated star point
  */
 void TMC4671::setSvPwm(bool enable){
+	conf.motconf.svpwm = enable;
 	if(conf.motconf.motor_type != MotorType::BLDC){
 		enable = false; // Only valid for 3 phase motors with isolated star point
 	}
-	conf.motconf.svpwm = enable;
+
 	updateReg(0x1A,enable,0x01,8);
 }
 
@@ -2403,6 +2415,29 @@ void TMC4671::setSvPwm(bool enable){
  */
 float TMC4671::getPwmFreq(){
 	return (4.0 * this->conf.hwconf.clockfreq) / (this->conf.pwmcnt +1);
+}
+
+/**
+ * Changes PWM frequency
+ * Max value 4095, minimum 255
+ *
+ */
+void TMC4671::setPwmMaxCnt(uint16_t maxcnt){
+	maxcnt = clip(maxcnt, 255, 4095);
+	this->conf.pwmcnt = maxcnt;
+	writeReg(0x18, maxcnt);
+}
+
+/**
+ * Changes the PWM frequency to a desired frequency
+ * Possible values depend on the hwclock.
+ * At 25MHz the lowest possible frequency is 24.1kHz
+ */
+void TMC4671::setPwmFreq(float freq){
+	if(freq <= 0)
+		return;
+	uint16_t maxcnt = ((4.0 * this->conf.hwconf.clockfreq) / freq) -1;
+	setPwmMaxCnt(maxcnt);
 }
 
 
@@ -2473,11 +2508,10 @@ void TMC4671::writeReg(uint8_t reg,uint32_t dat){
 	memcpy(spi_buf+1,&dat,4);
 
 	// -----
-	//spiPort.transmit_DMA(this->spi_buf, 5, this); // not using DMA enforces the required delays
 	spiPort.transmit(spi_buf, 5, this, SPITIMEOUT);
 }
 
-void TMC4671::writeRegDMA(uint8_t reg,uint32_t dat){
+void TMC4671::writeRegAsync(uint8_t reg,uint32_t dat){
 
 	// wait until ready
 	spiPort.takeSemaphore();
@@ -2486,7 +2520,11 @@ void TMC4671::writeRegDMA(uint8_t reg,uint32_t dat){
 	memcpy(spi_buf+1,&dat,4);
 
 	// -----
+#ifdef TMC4671_ALLOW_DMA
 	spiPort.transmit_DMA(this->spi_buf, 5, this);
+#else
+	spiPort.transmit_IT(this->spi_buf, 5, this);
+#endif
 }
 
 void TMC4671::updateReg(uint8_t reg,uint32_t dat,uint32_t mask,uint8_t shift){
@@ -2547,7 +2585,8 @@ void TMC4671::statusCheck(){
 
 	if(statusFlags.flags.not_PLL_locked){
 		// Critical error. PLL not locked
-		ErrorHandler::addError(Error(ErrorCode::tmcPLLunlocked, ErrorType::critical, "TMC PLL not locked"));
+		// Creating error object not allowed. Function is called from flag isr! ignore for now.
+		//ErrorHandler::addError(Error(ErrorCode::tmcPLLunlocked, ErrorType::critical, "TMC PLL not locked"));
 	}
 
 
@@ -2844,6 +2883,7 @@ void TMC4671::registerCommands(){
 	registerCommand("trqbq_q", TMC4671_commands::torqueFilter_q, "Torque filter q*100",CMDFLAG_GET | CMDFLAG_SET);
 	registerCommand("pidautotune", TMC4671_commands::pidautotune, "Start PID autoruning",CMDFLAG_GET);
 	registerCommand("fluxbrake", TMC4671_commands::fluxbrake, "Prefer energy dissipation in motor",CMDFLAG_GET | CMDFLAG_SET);
+	registerCommand("pwmfreq", TMC4671_commands::pwmfreq, "Get/set pwm frequency",CMDFLAG_GET | CMDFLAG_SET | CMDFLAG_DEBUG);
 }
 
 
@@ -3144,6 +3184,14 @@ CommandStatus TMC4671::command(const ParsedCommand& cmd,std::vector<CommandReply
 		handleGetSet(cmd, replies, conf.enableFluxDissipation);
 		break;
 
+	case TMC4671_commands::pwmfreq:
+		if(cmd.type == CMDtype::set){
+				setPwmFreq(cmd.val);
+			}else if(cmd.type == CMDtype::get){
+				replies.emplace_back(getPwmFreq());
+			}
+		break;
+
 	default:
 		return CommandStatus::NOT_FOUND;
 	}
@@ -3155,6 +3203,9 @@ CommandStatus TMC4671::command(const ParsedCommand& cmd,std::vector<CommandReply
 
 #ifdef TIM_TMC
 	void TMC4671::timerElapsed(TIM_HandleTypeDef* htim){
+		if(htim != this->externalEncoderTimer){
+			return;
+		}
 		// Read encoder and send to tmc
 		if(usingExternalEncoder() && externalEncoderAllowed() && this->conf.motconf.phiEsource == PhiE::extEncoder && extEncUpdater != nullptr){
 			//setPhiE_ext(getPhiEfromExternalEncoder());
@@ -3188,7 +3239,7 @@ void TMC4671::TMC_ExternalEncoderUpdateThread::Run(){
 	while(true){
 		this->WaitForNotification();
 		if(tmc->usingExternalEncoder() && !tmc->spiPort.isTaken()){
-			tmc->writeRegDMA(0x1C, (tmc->getPhiEfromExternalEncoder())); // Write phiE_ext
+			tmc->writeRegAsync(0x1C, (tmc->getPhiEfromExternalEncoder())); // Write phiE_ext
 		}
 	}
 }

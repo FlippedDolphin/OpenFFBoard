@@ -28,8 +28,12 @@
 #ifdef FFBHIDEXT
 #include "FFBHIDExt.h"
 #endif
+#ifdef CANINPUTMAIN
+#include "CanInputMain.h"
+#endif
 
 // Add all classes here
+#ifndef CLASSREGISTRY_OVERRIDE
 const std::vector<class_entry<FFBoardMain>> class_registry =
 {
 		add_class<FFBoardMain,FFBoardMain>(0),
@@ -58,7 +62,12 @@ const std::vector<class_entry<FFBoardMain>> class_registry =
 		add_class<CanBridge,FFBoardMain>(),
 #endif
 
+#ifdef CANINPUTMAIN
+		add_class<CANInputMain,FFBoardMain>(),
+#endif
+
 		add_class<CustomMain,FFBoardMain>()
 };
+#endif
 
 

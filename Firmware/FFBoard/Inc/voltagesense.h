@@ -9,8 +9,8 @@
 #define VOLTAGESENSE_H_
 #include "target_constants.h"
 
-uint16_t getIntV();
-uint16_t getExtV();
+int32_t getIntV();
+int32_t getExtV();
 void brakeCheck();
 
 /*
@@ -25,6 +25,18 @@ void setVSenseMult(float vSenseMultiplier);
  * Set vMax = 0 to completely deactivate the brake resistor function. DANGEROUS
  *
  */
-void setupBrakePin(uint32_t vdiffAct,uint32_t vdiffDeact,uint32_t vMax);
+void setupBrakePin(uint32_t vdiffAct,int32_t vdiffDeact,int32_t vMax);
+
+/**
+ * Converts an adc reading to millivolts using the internal calibration and reference voltage
+ * Requires ADC_INTREF_VOL and VSENSE_ADC_RES
+ */
+float adcValToVoltage(uint32_t adcval);
+
+/**
+ * Helper function implementation for getting the chip temperature if read via internal ADC channel
+ * __weak defined and can be overridden in chip dependent code
+ */
+int32_t getChipTemp();
 
 #endif /* VOLTAGESENSE_H_ */

@@ -11,78 +11,23 @@
 #include "tusb.h"
 #include "usb_hid_ffb_desc.h"
 
-#include "SPIButtons.h"
-#include "CanButtons.h"
-#include "LocalButtons.h"
-#include <ShifterAnalog.h>
-#include "PCF8574.h"
-
-#include "LocalAnalog.h"
-#include "CanAnalog.h"
-#include "ADS111X.h"
-
 #include "cmsis_os.h"
 extern osThreadId_t defaultTaskHandle;
 
 //////////////////////////////////////////////
-/*
- * Sources for class choosers here
- */
-// Register possible button sources (id 0-15)
-const std::vector<class_entry<ButtonSource>> button_sources =
-{
-#ifdef LOCALBUTTONS
-		add_class<LocalButtons,ButtonSource>(0),
-#endif
-#ifdef SPIBUTTONS
-		add_class<SPI_Buttons_1,ButtonSource>(1),
-#endif
-#ifdef SPIBUTTONS2
-		add_class<SPI_Buttons_2,ButtonSource>(2),
-#endif
-#ifdef SHIFTERBUTTONS
-		add_class<ShifterAnalog,ButtonSource>(3),
-#endif
-#ifdef PCF8574BUTTONS
-		add_class<PCF8574Buttons,ButtonSource>(4),
-#endif
-#ifdef CANBUTTONS
-		add_class<CanButtons,ButtonSource>(5),
-#endif
-};
 
-// Register possible analog sources (id 0-15)
-const std::vector<class_entry<AnalogSource>> analog_sources =
-{
-#ifdef ANALOGAXES
-		add_class<LocalAnalog,AnalogSource>(0),
-#endif
-#ifdef CANANALOG
-		add_class<CanAnalog<8>,AnalogSource>(1),
-#endif
-#ifdef ADS111XANALOG
-		add_class<ADS111X_AnalogSource,AnalogSource>(2),
-#endif
-};
 
 /**
  * setFFBEffectsCalc must be called in constructor of derived class to finish the setup
  */
 FFBHIDMain::FFBHIDMain(uint8_t axisCount) :
-		Thread("FFBMAIN", 256, 30),axisCount(axisCount),btn_chooser(button_sources),analog_chooser(analog_sources)
+		Thread("FFBMAIN", 256, 30),
+		SelectableInputs(ButtonSource::all_buttonsources,AnalogSource::all_analogsources),
+		axisCount(axisCount)
 {
 
-	restoreFlash(); // Load parameters
+	restoreFlashDelayed(); // Load parameters
 	registerCommands();
-
-
-#ifdef E_STOP_Pin
-	bool estopState = HAL_GPIO_ReadPin(E_STOP_GPIO_Port, E_STOP_Pin) == GPIO_PIN_RESET;
-	if(estopState){ // Estop pressed at startup
-		emergencyStop(!estopState);
-		lastEstop = HAL_GetTick();
-	}
-#endif
 
 }
 
@@ -138,6 +83,14 @@ void FFBHIDMain::saveFlash(){
 
 
 void FFBHIDMain::Run(){
+#ifdef E_STOP_Pin
+	bool estopState = HAL_GPIO_ReadPin(E_STOP_GPIO_Port, E_STOP_Pin) == GPIO_PIN_RESET;
+	if(estopState){ // Estop pressed at startup
+		emergencyStop(!estopState);
+//		control.emergency = true; // Immediately enter emergency state but without notifying other classes yet
+		lastEstop = HAL_GetTick();
+	}
+#endif
 	while(true){
 		Delay(1);
 		updateControl();
@@ -181,71 +134,6 @@ void FFBHIDMain::updateControl(){
 }
 
 
-// Buttons
-void FFBHIDMain::clearBtnTypes(){
-	// Destruct all button sources
-
-	this->btns.clear();
-}
-
-void FFBHIDMain::setBtnTypes(uint16_t btntypes){
-	sourcesSem.Take();
-	this->btnsources = btntypes;
-	clearBtnTypes();
-	for(uint8_t id = 0;id<16;id++){
-		if((btntypes >> id) & 0x1){
-			// Matching flag
-			ButtonSource* btn = btn_chooser.Create(id);
-			if(btn!=nullptr)
-				this->btns.push_back(std::unique_ptr<ButtonSource>(btn));
-		}
-	}
-	sourcesSem.Give();
-}
-
-void FFBHIDMain::addBtnType(uint16_t id){
-	for(auto &btn : this->btns){
-		if(btn->getInfo().id == id){
-			return;
-		}
-	}
-	ButtonSource* btn = btn_chooser.Create(id);
-	if(btn!=nullptr)
-		this->btns.push_back(std::unique_ptr<ButtonSource>(btn));
-}
-
-// Analog
-void FFBHIDMain::clearAinTypes(){
-	// Destruct all button sources
-
-	this->analog_inputs.clear();
-}
-
-void FFBHIDMain::setAinTypes(uint16_t aintypes){
-	sourcesSem.Take();
-	this->ainsources = aintypes;
-	clearAinTypes();
-	for(uint8_t id = 0;id<16;id++){
-		if((aintypes >> id) & 0x1){
-			// Matching flag
-			AnalogSource* ain = analog_chooser.Create(id);
-			if(ain!=nullptr)
-				this->analog_inputs.push_back(std::unique_ptr<AnalogSource>(ain));
-		}
-	}
-	sourcesSem.Give();
-}
-void FFBHIDMain::addAinType(uint16_t id){
-	for(auto &ain : this->analog_inputs){
-		if(ain->getInfo().id == id){
-			return;
-		}
-	}
-	AnalogSource* ain = analog_chooser.Create(id);
-	if(ain!=nullptr)
-		this->analog_inputs.push_back(std::unique_ptr<AnalogSource>(ain));
-}
-
 uint32_t FFBHIDMain::getRate() {
 	return this->ffb->getRate();
 }
@@ -258,21 +146,20 @@ bool FFBHIDMain::getFfbActive(){
  * Sends periodic gamepad reports of buttons and analog axes
  */
 void FFBHIDMain::send_report(){
-	if(!sourcesSem.Take(10)){
+	// Check if HID command interface wants to send something and allow that if we did not skip too many reports
+	if(!tud_hid_n_ready(0) ||  ((reportSendCounter++ < usb_report_rate*2) && this->hidCommands->waitingToSend())){
 		return;
 	}
+	//Try semaphore
+//	if(!sourcesSem.Take(10)){
+//		return;
+//	}
 	// Read buttons
 	reportHID.buttons = 0; // Reset buttons
-	uint8_t shift = 0;
-	if(btns.size() != 0){
-		for(auto &btn : btns){
-			uint64_t buf = 0;
-			uint8_t amount = btn->readButtons(&buf);
-			reportHID.buttons |= buf << shift;
-			shift += amount;
-		}
-	}
 
+	uint64_t b = 0;
+	SelectableInputs::getButtonValues(b);
+	reportHID.buttons = b;
 
 	// Encoder
 	//axes_manager->addAxesToReport(analogAxesReport, &count);
@@ -284,15 +171,13 @@ void FFBHIDMain::send_report(){
 	}
 
 	// Fill remaining values with analog inputs
-	for(auto &ain : analog_inputs){
-		std::vector<int32_t>* axes = ain->getAxes();
-		for(int32_t val : *axes){
-			if(count >= analogAxisCount)
-				break;
-			setHidReportAxis(&reportHID,count++,val);
-		}
+	axes = SelectableInputs::getAnalogValues();
+	for(int32_t val : *axes){
+		if(count >= analogAxisCount)
+			break;
+		setHidReportAxis(&reportHID,count++,val);
 	}
-	sourcesSem.Give();
+//	sourcesSem.Give();
 	// Fill rest
 	for(;count<analogAxisCount; count++){
 		setHidReportAxis(&reportHID,count,0);
@@ -302,10 +187,7 @@ void FFBHIDMain::send_report(){
 	/*
 	 * Only send a new report if actually changed since last time or timeout and hid is ready
 	 */
-	if( (reportSendCounter++ > 100/usb_report_rate || (memcmp(&lastReportHID,&reportHID,sizeof(reportHID_t)) != 0) )
-		&& tud_hid_n_ready(0)
-		&& !(reportSendCounter < usb_report_rate*2 && this->hidCommands->waitingToSend())
-		) // Check if HID command interface wants to send something and allow that if we did not skip too many reports
+	if( (reportSendCounter > 100/usb_report_rate || (memcmp(&lastReportHID,&reportHID,sizeof(reportHID_t)) != 0) ))
 	{
 
 

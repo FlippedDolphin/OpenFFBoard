@@ -146,11 +146,11 @@ union StatusFlags {
 struct TMC4671MainConfig{
 	TMC4671HardwareTypeConf hwconf;
 	TMC4671MotConf motconf;
-	uint16_t pwmcnt 		= 3999; // PWM resolution is 12 bit internally
+	uint16_t pwmcnt 		= 4095; // PWM resolution is 12 bit internally
 	uint8_t bbmL			= 50;
 	uint8_t bbmH			= 50;
 	uint16_t mdecA 			= 660; // 334 default. 331 recommended by datasheet,662 double. 660 lowest noise
-	uint16_t mdecB 			= 660; // Encoder ADC high resolution recommended
+	uint16_t mdecB 			= 331; // Encoder ADC fast rate recommended
 	uint32_t mclkA			= 0x20000000; //0x20000000 default
 	uint32_t mclkB			= 0x20000000; // For AENC
 	uint16_t adc_I0_offset 	= 33415;
@@ -161,7 +161,7 @@ struct TMC4671MainConfig{
 	bool encoderReversed	= false;
 	bool combineEncoder		= false;
 	bool invertForce		= false;
-	bool enableFluxDissipation = true;
+	bool enableFluxDissipation = false;
 };
 
 struct TMC4671PIDConf{
@@ -327,7 +327,7 @@ class TMC4671 :
 		torqueP,torqueI,fluxP,fluxI,velocityP,velocityI,posP,posI,
 		tmctype,pidPrec,phiesrc,fluxoffset,seqpi,tmcIscale,encdir,temp,reg,
 		svpwm,fullCalibration,calibrated,abnindexenabled,findIndex,getState,encpol,combineEncoder,invertForce,vmTmc,
-		extphie,torqueFilter_mode,torqueFilter_f,torqueFilter_q,pidautotune,fluxbrake
+		extphie,torqueFilter_mode,torqueFilter_f,torqueFilter_q,pidautotune,fluxbrake,pwmfreq
 	};
 
 #ifdef TMCDEBUG
@@ -344,7 +344,7 @@ public:
 	static uint16_t encodeMotToInt(TMC4671MotConf mconf);
 
 
-	TMC4671(SPIPort& spiport,OutputPin cspin = OutputPin(*SPI1_SS1_GPIO_Port, SPI1_SS1_Pin),uint8_t address=1);
+	TMC4671(SPIPort& spiport,OutputPin cspin,uint8_t address=1);
 
 	void setHwType(TMC_HW_Ver type);
 
@@ -368,7 +368,7 @@ public:
 
 	uint32_t readReg(uint8_t reg);
 	void writeReg(uint8_t reg,uint32_t dat);
-	void writeRegDMA(uint8_t reg,uint32_t dat);
+	void writeRegAsync(uint8_t reg,uint32_t dat);
 	void updateReg(uint8_t reg,uint32_t dat,uint32_t mask,uint8_t shift);
 	//void SpiTxCplt(SPI_HandleTypeDef *hspi);
 
@@ -415,6 +415,7 @@ public:
 	void setExternalEncoderAllowed(bool allow);
 
 	float getPwmFreq();
+	void setPwmFreq(float freq);
 
 	void setBBM(uint8_t bbml,uint8_t bbmh);
 
@@ -456,6 +457,8 @@ public:
 	std::pair<int32_t,int32_t> getActualTorqueFlux();
 	int32_t getActualFlux();
 	int32_t getActualTorque();
+
+	void rampFlux(uint16_t target,uint16_t time_ms);
 
 	bool checkAdc();
 
@@ -616,6 +619,7 @@ private:
 	void initAdc(uint16_t mdecA, uint16_t mdecB,uint32_t mclkA,uint32_t mclkB);
 	void setPwm(uint8_t val,uint16_t maxcnt,uint8_t bbmL,uint8_t bbmH);// 100MHz/maxcnt+1
 	void setPwm(TMC_PwmMode val);// pwm mode
+	void setPwmMaxCnt(uint16_t maxcnt);
 	void setSvPwm(bool enable);
 	void encInit();
 	void encoderIndexHit();
@@ -655,7 +659,7 @@ private:
 
 class TMC_1 : public TMC4671 {
 public:
-	TMC_1() : TMC4671{motor_spi,OutputPin(*SPI1_SS1_GPIO_Port, SPI1_SS1_Pin),1} {}
+	TMC_1() : TMC4671{motor_spi,*motor_spi.getCsPin(0),1} {}
 
 	//const ClassIdentifier getInfo() override;
 	static bool isCreatable();
@@ -664,7 +668,7 @@ public:
 
 class TMC_2 : public TMC4671 {
 public:
-	TMC_2() : TMC4671{motor_spi,OutputPin(*SPI1_SS2_GPIO_Port, SPI1_SS2_Pin),2} {}
+	TMC_2() : TMC4671{motor_spi,*motor_spi.getCsPin(1),2} {}
 
 	//const ClassIdentifier getInfo() override;
 	static bool isCreatable();

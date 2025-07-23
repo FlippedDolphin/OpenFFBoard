@@ -9,7 +9,7 @@
 #include <math.h>
 #include "EffectsCalculator.h"
 #include "Axis.h"
-
+#include "ledEffects.h"
 
 
 #define EFFECT_STATE_INACTIVE 0
@@ -71,6 +71,7 @@ void EffectsCalculator::setActive(bool active)
 		effects_stats[i].current = {0}; // Reset active effect forces
 		effects_statslast[i].current = {0};
 	}
+	setClipLed(active);
 }
 
 
@@ -122,7 +123,7 @@ void EffectsCalculator::calculateEffects(std::vector<std::unique_ptr<Axis>> &axe
 				continue;
 			}
 			// If effect has expired make inactive
-			if (HAL_GetTick() > effect->startTime + effect->duration)
+			if (HAL_GetTick() - effect->startTime > effect->duration)
 			{
 				effect->state = EFFECT_STATE_INACTIVE;
 				for(uint8_t axis=0 ; axis < axisCount ; axis++)
@@ -467,7 +468,7 @@ void EffectsCalculator::setFilters(FFB_Effect *effect){
 	switch (effect->type)
 	{
 	case FFB_EFFECT_DAMPER:
-		fnptr = [=](std::unique_ptr<Biquad> &filter){
+		fnptr = [=, this](std::unique_ptr<Biquad> &filter){
 			if (filter != nullptr)
 				filter->setBiquad(BiquadType::lowpass, this->filter[filterProfileId].damper.freq/ (float)calcfrequency, this->filter[filterProfileId].damper.q * qfloatScaler , (float)0.0);
 			else
@@ -475,7 +476,7 @@ void EffectsCalculator::setFilters(FFB_Effect *effect){
 		};
 		break;
 	case FFB_EFFECT_FRICTION:
-		fnptr = [=](std::unique_ptr<Biquad> &filter){
+		fnptr = [=, this](std::unique_ptr<Biquad> &filter){
 			if (filter != nullptr)
 				filter->setBiquad(BiquadType::lowpass, this->filter[filterProfileId].friction.freq / (float)calcfrequency, this->filter[filterProfileId].friction.q * qfloatScaler, (float)0.0);
 			else
@@ -483,7 +484,7 @@ void EffectsCalculator::setFilters(FFB_Effect *effect){
 		};
 		break;
 	case FFB_EFFECT_INERTIA:
-		fnptr = [=](std::unique_ptr<Biquad> &filter){
+		fnptr = [=, this](std::unique_ptr<Biquad> &filter){
 			if (filter != nullptr)
 				filter->setBiquad(BiquadType::lowpass, this->filter[filterProfileId].inertia.freq / (float)calcfrequency, this->filter[filterProfileId].inertia.q * qfloatScaler, (float)0.0);
 			else
@@ -491,7 +492,7 @@ void EffectsCalculator::setFilters(FFB_Effect *effect){
 		};
 		break;
 	case FFB_EFFECT_CONSTANT:
-		fnptr = [=](std::unique_ptr<Biquad> &filter){
+		fnptr = [=, this](std::unique_ptr<Biquad> &filter){
 			if (filter != nullptr)
 				filter->setBiquad(BiquadType::lowpass, this->filter[0].constant.freq / (float)calcfrequency, this->filter[0].constant.q * qfloatScaler, (float)0.0);
 			else

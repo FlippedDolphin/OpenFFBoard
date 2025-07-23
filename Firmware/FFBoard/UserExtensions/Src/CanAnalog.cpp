@@ -32,19 +32,12 @@ void CanAnalogBase::setupCanPort(){
 	if(filterId != -1){
 		this->port->removeCanFilter(filterId);
 	}
-	CAN_FilterTypeDef sFilterConfig;
-	sFilterConfig.FilterBank = 0;
-	sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
-	sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	sFilterConfig.FilterIdHigh = (canId << 5);
-	sFilterConfig.FilterIdLow = 0x0000;
-	sFilterConfig.FilterMaskIdHigh = ~((canId << 5) ^ ((canId+1) << 5)); // Mask is inverted xor of the IDs
-	sFilterConfig.FilterMaskIdLow = 0x0000;
-	sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-	sFilterConfig.FilterActivation = ENABLE;
-	sFilterConfig.SlaveStartFilterBank = 14;
-	this->filterId = this->port->addCanFilter(sFilterConfig);
 
+	CAN_filter filterConf;
+	filterConf.buffer = 0;
+	filterConf.filter_id = canId;
+	filterConf.filter_mask =  ~((canId) ^ ((canId+1) ));
+	this->filterId = this->port->addCanFilter(filterConf);
 	//this->port->setSpeedPreset(CANSPEEDPRESET_500); // default speed used
 	this->port->start();
 }
@@ -112,11 +105,10 @@ CommandStatus CanAnalogBase::command(const ParsedCommand& cmd,std::vector<Comman
 	return CommandStatus::OK;
 }
 
-void CanAnalogBase::canRxPendCallback(CAN_HandleTypeDef *hcan,uint8_t* rxBuf,CAN_RxHeaderTypeDef* rxHeader,uint32_t fifo){
+void CanAnalogBase::canRxPendCallback(CANPort* port,CAN_rx_msg& msg){
 
-	uint32_t id = (rxHeader->StdId) & 0x7FF;
-	pulseClipLed();
-	if(rxHeader->RTR != CAN_RTR_DATA || rxHeader->DLC != 8){
+	uint32_t id = (msg.header.id) & 0x7FF;
+	if(msg.header.rtr){
 		return;
 	}
 
@@ -124,8 +116,8 @@ void CanAnalogBase::canRxPendCallback(CAN_HandleTypeDef *hcan,uint8_t* rxBuf,CAN
 		if(id != this->canId+packet){
 			continue;
 		}
-		for(uint8_t i = 0; i< axes-(packet*4) ; i++){
-			this->buf[i+(packet*4)] = rxBuf[i*2] | (rxBuf[i*2+1] << 8);
+		for(uint8_t i = 0; i < 4 && (i + packet*4) < axes && (i*2+1) < msg.header.length; i++) {
+			this->buf[i + packet*4] = (int16_t)(msg.data[i*2] | (msg.data[i*2+1] << 8));
 		}
 	}
 }
